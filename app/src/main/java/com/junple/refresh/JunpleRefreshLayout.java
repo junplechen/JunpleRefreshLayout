@@ -1,14 +1,23 @@
 package com.junple.refresh;
 
+import android.animation.Animator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.drawable.Drawable;
 import android.support.annotation.Nullable;
+import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.LinearLayout;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 /**
  * Created by junple on 2017/12/20.
@@ -21,9 +30,12 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
     private View m_contentView;
     private int m_refreshStatus = RefreshLayoutEvent.NORMAL;
     private RefreshAdapter m_refreshAdapter;
-    private UpdateListener m_refreshListener;
+    private OnUpdateListener m_onUpdateListener;
+    private List<OnUpdateListener> m_onUpdateListenerList = new ArrayList<>();
     private SwipeController m_swipeController;
     private OnRefreshListener m_onRefreshListener;
+    private float m_previousMovedValue = 0.0f;
+    private float m_previousPostion = 0.0f;
 
     public JunpleRefreshLayout(Context context, @Nullable AttributeSet attrs) {
         super(context,attrs);
@@ -31,12 +43,33 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
         TypedArray ta = context.obtainStyledAttributes( attrs, R.styleable.JunpleRefreshLayout);
         int footerLayoutId = ta.getResourceId( R.styleable.JunpleRefreshLayout_footer_layout, R.layout.footer);
         int headerLayoutId = ta.getResourceId( R.styleable.JunpleRefreshLayout_header_layout, R.layout.layout_header_default);
-        m_refreshLayoutIntiliazer = new JunpleRefreshLayoutInitiliazer( headerLayoutId, footerLayoutId, this);
+        Drawable headerDrawable = ta.getDrawable( R.styleable.JunpleRefreshLayout_header_background);
+        int header_extend_height = ta.getDimensionPixelSize( R.styleable.JunpleRefreshLayout_header_extend_height, 200);
+        int footer_extend_height = ta.getDimensionPixelSize( R.styleable.JunpleRefreshLayout_header_extend_height, 200);
+        String refreshUiControllerName = ta.getString( R.styleable.JunpleRefreshLayout_refresh_ui_contoller);
+
+        m_refreshLayoutIntiliazer = new SimpleRefreshLayoutInitiliazer( headerLayoutId, footerLayoutId, this, headerDrawable, null, header_extend_height, footer_extend_height);
         m_swipeController = new SimpleSwipeController();
         if( m_refreshLayoutIntiliazer!=null&&m_refreshLayoutIntiliazer.getHeaderView()!=null) {
             addView( m_refreshLayoutIntiliazer.getHeaderView());
         }
-        m_refreshListener = new DefaultUpdateListener();
+        m_onUpdateListener = new EventUpdateListener();
+        addOnUpdateListener( m_onUpdateListener);
+        if( refreshUiControllerName==null) {
+            addOnUpdateListener( new DefaultUiController());
+        }else {
+            try {
+                Class<?extends OnUpdateListener> uiControllerClass = (Class<? extends OnUpdateListener>) Class.forName( refreshUiControllerName);
+                OnUpdateListener uiController = uiControllerClass.newInstance();
+                addOnUpdateListener( uiController);
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (InstantiationException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public JunpleRefreshLayout(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
@@ -54,6 +87,7 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
         if( getContentView() instanceof RecyclerView) {
             setRefreshAdapter( new RecyclerViewRefreshAdapter());
         }
+        addOnUpdateListener( new DefaultUiController());
     }
 
     @Override
@@ -88,7 +122,7 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
     public void setRefreshStatus(int status) {
 
         if( status!=m_refreshStatus) {
-            m_refreshListener.onStatusChanged( this, m_refreshStatus, status);
+            doOnStatusChanged( this, m_refreshStatus, status);
             m_refreshStatus = status;
             if( status==RefreshLayoutEvent.REFRESHING&&m_onRefreshListener!=null) {
                 m_onRefreshListener.onRefresh( this);
@@ -131,8 +165,7 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
 
                             rlEvent.setMoveStatus(RefreshLayoutEvent.TO_REFRESH);
                             float generateValue = 100.0f / getHeaderView().getHeight() * (-getScrollY());
-                            if (m_refreshListener != null)
-                                m_refreshListener.onUpdate( JunpleRefreshLayout.this, rlEvent);
+                            doOnUpdate( JunpleRefreshLayout.this, rlEvent);
 
                             if (-getScrollY() > getHeaderView().getHeight()) {
                                 scrollTo(0, -getHeaderView().getHeight());
@@ -156,8 +189,7 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
                             else {
                                 rlEvent.setMoveStatus(RefreshLayoutEvent.TO_REFRESH);
                                 float generateValue = 100.0f / getHeaderView().getHeight() * (-getScrollY());
-                                if (m_refreshListener != null)
-                                    m_refreshListener.onUpdate( JunpleRefreshLayout.this, rlEvent);
+                                doOnUpdate( JunpleRefreshLayout.this, rlEvent);
                                 if( m_swipeController!=null) {
                                     scrollTo(0, (int) m_swipeController.onSwipe( generateValue,distance) + (int) getScrollY());
                                 }
@@ -171,30 +203,52 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
                         //setRefreshStatus( RefreshLayoutEvent.REFRESHING);
                         RefreshLayoutEvent rlEvent = new RefreshLayoutEvent();
                         rlEvent.setFingerStatus( RefreshLayoutEvent.FINGER_UP);
-                        //m_refreshListener.onStatusChanged( JunpleRefreshLayout.this, getRefreshStatus());
-                    m_refreshListener.onUpdate( JunpleRefreshLayout.this, rlEvent);
+                        //m_onUpdateListener.onStatusChanged( JunpleRefreshLayout.this, getRefreshStatus());
+                    m_onUpdateListener.onUpdate( JunpleRefreshLayout.this, rlEvent);
                 }
                 return false;
             }});
     }
 
-    public interface UpdateListener {
+    @Override
+    public void addOnUpdateListener(OnUpdateListener listener) {
 
-        void onUpdate( JunpleRefreshLayout view, RefreshLayoutEvent event);
-        void onStatusChanged( JunpleRefreshLayout view, int oldStatus,  int newStatus);
+        m_onUpdateListenerList.add( listener);
+        listener.onSettingToView( this);
     }
 
     @Override
-    public void setUpdateListener(UpdateListener listener) {
+    public void moveToPosition( float value, long duration) {
 
-        m_refreshListener = listener;
+        moveToPosition( value,duration,null);
     }
 
     @Override
-    public void moveToPostion( float value, long duration) {
+    public void moveToPosition(float value, long duration, final OnMoveEndListener listener) {
 
         ValueAnimator animator = ValueAnimator.ofFloat( getPosition(), value);
         animator.setDuration( duration);
+        animator.addListener(new Animator.AnimatorListener() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if( listener!=null) listener.onEnd( JunpleRefreshLayout.this);
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+
+            }
+
+            @Override
+            public void onAnimationRepeat(Animator animation) {
+
+            }
+        });
         animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(ValueAnimator animation) {
@@ -230,15 +284,48 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
             scrollTo( 0, (int)(getFooterView().getHeight()*value/100.0f));
         }
         RefreshLayoutEvent rlEvent = new RefreshLayoutEvent();
-        m_refreshListener.onUpdate( this, rlEvent);
+        doOnUpdate( this, rlEvent);
     }
 
     @Override
     public void finishRefresh() {
 
+
         if( getRefreshStatus()==RefreshLayoutEvent.REFRESHING) {
-            setRefreshStatus( RefreshLayoutEvent.NORMAL);
-            moveToPostion( 0.0f, 200);
+            setRefreshStatus( RefreshLayoutEvent.REFRESHING_SUCCESS);
+            moveToPosition(0.0f, 200, new OnMoveEndListener() {
+                @Override
+                public void onEnd(JunpleRefreshLayout view) {
+                    setRefreshStatus( RefreshLayoutEvent.NORMAL);
+                }
+            });
+        }
+    }
+
+    public void finishRefresh( long duration) {
+
+        if( getRefreshStatus()==RefreshLayoutEvent.REFRESHING) {
+            setRefreshStatus( RefreshLayoutEvent.REFRESHING_SUCCESS);
+
+            Timer timer = new Timer();
+            timer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    AppCompatActivity activity = (AppCompatActivity) getContext();
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            moveToPosition(0.0f, 200, new OnMoveEndListener() {
+                                @Override
+                                public void onEnd(JunpleRefreshLayout view) {
+                                    setRefreshStatus( RefreshLayoutEvent.NORMAL);
+                                }
+                            });
+                        }
+                    });
+                }
+            },duration);
+
         }
     }
 
@@ -248,8 +335,59 @@ public class JunpleRefreshLayout extends LinearLayout implements JunpleRefreshLa
         m_onRefreshListener = litener;
     }
 
+    @Override
+    public float getMovedValue() {
+
+        float value = 0.0f;
+        if( getScrollY()<0) {
+            value = -getScrollY()/(float)m_refreshLayoutIntiliazer.getHeaderHeight()*100.0f;
+        }
+        else {
+            value = -getScrollY()/(float)m_refreshLayoutIntiliazer.getFooterHeight()*100.0f;
+        }
+        return value;
+    }
+
+    @Override
+    public RefreshLayoutInitiliazer getRefreshLayoutInitiliazer() {
+        return m_refreshLayoutIntiliazer;
+    }
+
+    private void doOnUpdate(JunpleRefreshLayout view, RefreshLayoutEvent event) {
+
+        event.setPeviousMovedValue( m_previousMovedValue);
+        event.setPreviousPostion( m_previousPostion);
+        m_previousMovedValue = getMovedValue();
+        m_previousPostion = getPosition();
+        if( m_onUpdateListenerList==null) return;
+        for( int i=0; i<m_onUpdateListenerList.size(); i++) {
+            m_onUpdateListenerList.get( i).onUpdate( view, event);
+        }
+    }
+
+    private void doOnStatusChanged(  JunpleRefreshLayout view, int oldStatus,  int newStatus) {
+
+        if( m_onUpdateListenerList==null) return;
+        for( int i=0; i<m_onUpdateListenerList.size(); i++) {
+
+            m_onUpdateListenerList.get( i).onStatusChanged( view, oldStatus, newStatus);
+        }
+    }
+
     public interface OnRefreshListener {
 
         void onRefresh( JunpleRefreshLayout view);
+    }
+
+    public interface OnUpdateListener {
+
+        void onSettingToView( JunpleRefreshLayout view);
+        void onUpdate( JunpleRefreshLayout view, RefreshLayoutEvent event);
+        void onStatusChanged( JunpleRefreshLayout view, int oldStatus,  int newStatus);
+    }
+
+    public interface OnMoveEndListener {
+
+        void onEnd( JunpleRefreshLayout view);
     }
 }

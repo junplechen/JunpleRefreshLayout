@@ -34,4 +34,14 @@ class JunpleRefreshLayoutInitiliazer implements RefreshLayoutInitiliazer {
 
         return m_footerView;
     }
+
+    @Override
+    public int getHeaderHeight() {
+        return 0;
+    }
+
+    @Override
+    public int getFooterHeight() {
+        return 0;
+    }
 }

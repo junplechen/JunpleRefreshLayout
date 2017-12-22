@@ -3,15 +3,16 @@
     android:id="@+id/refresh"
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:jple="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     tools:context="com.junple.refresh.MainActivity"
-    jple:footer_layout="@layout/footer"
-    jple:header_layout="@layout/layout_header_default">
-
+    app:footer_layout="@layout/footer"
+    app:header_layout="@layout/header"
+    app:header_background="#e98787"
+    app:header_extend_height="50dp"
+    app:refresh_ui_contoller="com.junple.refresh.TestUiController">
 
     <android.support.v7.widget.RecyclerView
         android:id="@+id/recycler"

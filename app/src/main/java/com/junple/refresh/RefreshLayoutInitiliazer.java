@@ -10,4 +10,6 @@ interface RefreshLayoutInitiliazer {
 
     View getHeaderView();
     View getFooterView();
+    int getHeaderHeight();
+    int getFooterHeight();
 }

@@ -3,5 +3,9 @@
     <declare-styleable name="JunpleRefreshLayout">
         <attr name="header_layout" format="reference"/>
         <attr name="footer_layout" format="reference"/>
+        <attr name="header_background" format="reference|color"/>
+        <attr name="header_extend_height" format="dimension"/>
+        <attr name="footer_extend_height" format="dimension"/>
+        <attr name="refresh_ui_contoller" format="string"/>
     </declare-styleable>
 </resources>

@@ -16,10 +16,13 @@ public interface JunpleRefreshLayoutExecutor {
     void setRefreshStatus( int status);
     int getRefreshStatus();
     void initEvent();
-    void setUpdateListener(JunpleRefreshLayout.UpdateListener listener);
-    void moveToPostion( float value, long duration);
+    void addOnUpdateListener(JunpleRefreshLayout.OnUpdateListener listener);
+    void moveToPosition( float value, long duration);
+    void moveToPosition(float value, long duration, JunpleRefreshLayout.OnMoveEndListener listener);
     float getPosition();
     void setPostion( float value);
     void finishRefresh();
     void setOnRefreshLitener(JunpleRefreshLayout.OnRefreshListener litener);
+    float getMovedValue();
+    RefreshLayoutInitiliazer getRefreshLayoutInitiliazer();
 }

@@ -7,6 +7,10 @@ package com.junple.refresh;
 public class SimpleSwipeController implements SwipeController {
     @Override
     public float onSwipe(float swipedValue, float distanceY) {
-        return distanceY*(100.0f-swipedValue)/100.0f;
+
+        if( swipedValue>0 &&distanceY<0) {
+            return distanceY*(100.0f-swipedValue)/100.0f;
+        }
+        return distanceY;
     }
 }
